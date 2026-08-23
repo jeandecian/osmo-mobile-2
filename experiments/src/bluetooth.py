@@ -109,6 +109,18 @@ class Bluetooth:
 
         return {"tx": tx_uuid, "rx": rx_uuid, "battery": battery_uuid}
 
+    async def read_characteristic(self, char_uuid: str) -> bytes | None:
+        """Reads raw byte payload from a specific characteristic."""
+
+        if not self._client or not self.is_connected:
+            return None
+
+        try:
+            return bytes(await self._client.read_gatt_char(char_uuid))
+        except BleakError as e:
+            print(f"Read error on {char_uuid}: {e}")
+            return None
+
 
 def find_target_device(devices: list[BLEDevice]) -> BLEDevice | None:
     """Finds a target device from a list of BLE devices."""
@@ -167,6 +179,11 @@ async def main() -> None:
 
     channels: dict[str, str | None] = bt.get_uuid_channels()
     print(f"[{target_device}] UUID channels: {channels}")
+
+    if channels["battery"]:
+        raw_batt: bytes | None = await bt.read_characteristic(channels["battery"])
+        if raw_batt:
+            print(f"[{target_device}] Battery Level: {raw_batt[0]}%")
 
     print(f"[{target_device}] Disconnecting in 2 seconds...")
     await asyncio.sleep(2)
