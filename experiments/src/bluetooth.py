@@ -1,7 +1,9 @@
 import asyncio
+from collections.abc import Callable
 from typing import Any
 
 from bleak import BleakClient, BleakScanner
+from bleak.backends.characteristic import BleakGATTCharacteristic
 from bleak.backends.device import BLEDevice
 from bleak.exc import BleakError
 
@@ -121,6 +123,36 @@ class Bluetooth:
             print(f"Read error on {char_uuid}: {e}")
             return None
 
+    async def listen(
+        self,
+        char_uuid: str,
+        callback: Callable[[BleakGATTCharacteristic, bytearray], None],
+    ) -> bool:
+        """Subscribes to notifications on a characteristic."""
+
+        if not self._client or not self.is_connected:
+            return False
+
+        try:
+            await self._client.start_notify(char_uuid, callback)
+            return True
+        except BleakError as e:
+            print(f"Notification error on {char_uuid}: {e}")
+            return False
+
+    async def stop_listening(self, char_uuid: str) -> bool:
+        """Unsubscribes from notifications on a characteristic."""
+
+        if not self._client or not self.is_connected:
+            return False
+
+        try:
+            await self._client.stop_notify(char_uuid)
+            return True
+        except BleakError as e:
+            print(f"Stop notification error on {char_uuid}: {e}")
+            return False
+
 
 def find_target_device(devices: list[BLEDevice]) -> BLEDevice | None:
     """Finds a target device from a list of BLE devices."""
@@ -149,6 +181,14 @@ def print_gatt_services(services: list[dict[str, Any]]) -> None:
             print(f"  └── [Char] {char['uuid']} | Properties: [{props}]")
 
     print("-" * 64)
+
+
+def handle_notification(
+    characteristic: BleakGATTCharacteristic, data: bytearray
+) -> None:
+    """Callback triggered whenever incoming telemetry arrives from RX."""
+
+    print(f"[RX <- {characteristic.uuid}][{len(data):>2} bytes] {data.hex(' ')}")
 
 
 async def main() -> None:
@@ -184,6 +224,16 @@ async def main() -> None:
         raw_batt: bytes | None = await bt.read_characteristic(channels["battery"])
         if raw_batt:
             print(f"[{target_device}] Battery Level: {raw_batt[0]}%")
+
+    if channels["rx"]:
+        print(f"[{target_device}] Subscribing to RX channel: {channels['rx']}")
+        await bt.listen(channels["rx"], handle_notification)
+
+        print(f"[{target_device}] Listening for telemetry (5s)...")
+        await asyncio.sleep(5)
+
+        print(f"[{target_device}] Stopping subscription...")
+        await bt.stop_listening(channels["rx"])
 
     print(f"[{target_device}] Disconnecting in 2 seconds...")
     await asyncio.sleep(2)
