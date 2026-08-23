@@ -1,11 +1,19 @@
 import asyncio
+import logging
 from collections.abc import Callable
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from bleak import BleakClient, BleakScanner
 from bleak.backends.characteristic import BleakGATTCharacteristic
 from bleak.backends.device import BLEDevice
 from bleak.exc import BleakError
+
+CAPTURES_DIR: Path = Path("experiments/results/captures")
+
+telemetry_logger: logging.Logger = logging.getLogger("telemetry")
+telemetry_logger.setLevel(logging.INFO)
 
 
 class Bluetooth:
@@ -183,12 +191,35 @@ def print_gatt_services(services: list[dict[str, Any]]) -> None:
     print("-" * 64)
 
 
+def setup_telemetry_file_logger() -> Path:
+    """Initializes the file handler when the capture actually begins."""
+
+    CAPTURES_DIR.mkdir(parents=True, exist_ok=True)
+
+    timestamp: str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    capture_path: Path = CAPTURES_DIR / f"capture_{timestamp}.log"
+
+    telemetry_logger.handlers.clear()
+
+    file_handler: logging.FileHandler = logging.FileHandler(
+        capture_path, encoding="utf-8"
+    )
+    file_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
+    telemetry_logger.addHandler(file_handler)
+
+    return capture_path
+
+
 def handle_notification(
     characteristic: BleakGATTCharacteristic, data: bytearray
 ) -> None:
     """Callback triggered whenever incoming telemetry arrives from RX."""
 
-    print(f"[RX <- {characteristic.uuid}][{len(data):>2} bytes] {data.hex(' ')}")
+    hex_str: str = data.hex(" ")
+    length: str = f"{len(data):>2}"
+
+    print(f"[RX <- {characteristic.uuid}][{length} bytes] {hex_str}")
+    telemetry_logger.info(f"{length} | {hex_str}")
 
 
 async def main() -> None:
@@ -226,6 +257,9 @@ async def main() -> None:
             print(f"[{target_device}] Battery Level: {raw_batt[0]}%")
 
     if channels["rx"]:
+        capture_path: Path = setup_telemetry_file_logger()
+        print(f"[{target_device}] Logging capture to '{capture_path}'")
+
         print(f"[{target_device}] Subscribing to RX channel: {channels['rx']}")
         await bt.listen(channels["rx"], handle_notification)
 
