@@ -73,6 +73,42 @@ class Bluetooth:
 
         return services_data
 
+    def get_uuid_channels(self) -> dict[str, str | None]:
+        """Extracts TX, RX, and Battery UUIDs directly from discovered services."""
+
+        tx_uuid: str | None = None
+        rx_uuid: str | None = None
+        battery_uuid: str | None = None
+
+        # Bluetooth Base UUID: 0000XXXX-0000-1000-8000-00805F9B34FB
+        BLUETOOTH_SIG_SERVICE_PREFIX: str = "000018"  # 18XX
+        BATTERY_LEVEL_ASSIGNED_CODE: str = "2a19"
+
+        for service in self.discover_services():
+            service_uuid: str = service["uuid"].lower()
+            IS_BLUETOOTH_SERVICE: bool = service_uuid.startswith(
+                BLUETOOTH_SIG_SERVICE_PREFIX
+            )
+
+            for char in service["characteristics"]:
+                props: list[str] = char["properties"]
+                uuid: str = char["uuid"]
+
+                if (
+                    "write-without-response" in props
+                    and tx_uuid is None
+                    and not IS_BLUETOOTH_SERVICE
+                ):
+                    tx_uuid = uuid
+
+                if "notify" in props and rx_uuid is None and not IS_BLUETOOTH_SERVICE:
+                    rx_uuid = uuid
+
+                if BATTERY_LEVEL_ASSIGNED_CODE in uuid.lower() and battery_uuid is None:
+                    battery_uuid = uuid
+
+        return {"tx": tx_uuid, "rx": rx_uuid, "battery": battery_uuid}
+
 
 def find_target_device(devices: list[BLEDevice]) -> BLEDevice | None:
     """Finds a target device from a list of BLE devices."""
@@ -128,6 +164,9 @@ async def main() -> None:
 
     services: list[dict[str, Any]] = bt.discover_services()
     print_gatt_services(services)
+
+    channels: dict[str, str | None] = bt.get_uuid_channels()
+    print(f"[{target_device}] UUID channels: {channels}")
 
     print(f"[{target_device}] Disconnecting in 2 seconds...")
     await asyncio.sleep(2)
