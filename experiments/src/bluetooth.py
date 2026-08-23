@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -263,11 +264,19 @@ async def main() -> None:
         print(f"[{target_device}] Subscribing to RX channel: {channels['rx']}")
         await bt.listen(channels["rx"], handle_notification)
 
-        print(f"[{target_device}] Listening for telemetry (5s)...")
-        await asyncio.sleep(5)
+        print(f"[{target_device}] Listening for telemetry... Press Ctrl+C to stop.\n")
+        start_time: float = time.perf_counter()
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            print(f"[{target_device}] Stopping capture...")
 
-        print(f"[{target_device}] Stopping subscription...")
-        await bt.stop_listening(channels["rx"])
+            duration: float = round(time.perf_counter() - start_time, 2)
+            print(f"[{target_device}] Telemetry capture lasted {duration} seconds")
+        finally:
+            print(f"[{target_device}] Stopping subscription...")
+            await bt.stop_listening(channels["rx"])
 
     print(f"[{target_device}] Disconnecting in 2 seconds...")
     await asyncio.sleep(2)
@@ -277,4 +286,7 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
