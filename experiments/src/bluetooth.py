@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 
 from bleak import BleakClient, BleakScanner
 from bleak.backends.device import BLEDevice
@@ -6,7 +7,7 @@ from bleak.exc import BleakError
 
 
 class Bluetooth:
-    """Handles low-level BLE scanning and connection management."""
+    """Handles low-level BLE scanning, GATT connections, and communication."""
 
     def __init__(self, timeout: float = 5.0) -> None:
         self.timeout: float = timeout
@@ -44,6 +45,34 @@ class Bluetooth:
 
         return self._client is not None and self._client.is_connected
 
+    def discover_services(self) -> list[dict[str, Any]]:
+        """Returns all available GATT services and their characteristics."""
+
+        if not self._client or not self.is_connected:
+            return []
+
+        services_data: list[dict[str, Any]] = []
+        for service in self._client.services:
+            char_list: list[dict[str, Any]] = []
+
+            for char in service.characteristics:
+                char_list.append(
+                    {
+                        "uuid": char.uuid,
+                        "properties": list(char.properties),
+                    }
+                )
+
+            services_data.append(
+                {
+                    "uuid": service.uuid,
+                    "description": service.description,
+                    "characteristics": char_list,
+                }
+            )
+
+        return services_data
+
 
 def find_target_device(devices: list[BLEDevice]) -> BLEDevice | None:
     """Finds a target device from a list of BLE devices."""
@@ -55,6 +84,23 @@ def find_target_device(devices: list[BLEDevice]) -> BLEDevice | None:
             return device
 
     return None
+
+
+def print_gatt_services(services: list[dict[str, Any]]) -> None:
+    if not services:
+        print("Cannot discover services: Not connected.")
+        return
+
+    print("-" * 64)
+
+    for service in services:
+        print(f"[Service] {service['uuid']} ({service['description']})")
+
+        for char in service["characteristics"]:
+            props = ", ".join(char["properties"])
+            print(f"  └── [Char] {char['uuid']} | Properties: [{props}]")
+
+    print("-" * 64)
 
 
 async def main() -> None:
@@ -77,6 +123,11 @@ async def main() -> None:
         return
 
     print(f"[{target_device}] Connected successfully!")
+
+    print(f"[{target_device}] Discovering services...")
+
+    services: list[dict[str, Any]] = bt.discover_services()
+    print_gatt_services(services)
 
     print(f"[{target_device}] Disconnecting in 2 seconds...")
     await asyncio.sleep(2)
