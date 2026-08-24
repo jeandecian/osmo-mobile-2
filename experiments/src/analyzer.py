@@ -1,0 +1,92 @@
+import sys
+from pathlib import Path
+
+
+class Analyzer:
+    """Ingests capture log files and manages raw payload data for analysis."""
+
+    def __init__(self, log_path: str | Path) -> None:
+        self.log_path: Path = Path(log_path)
+        self.payloads: list[bytes] = []
+
+    def load_payloads(self) -> list[bytes]:
+        """Reads the log file line-by-line and extracts raw hex bytes."""
+
+        if not self.log_path.exists():
+            raise FileNotFoundError(f"Capture file not found: {self.log_path}")
+
+        payloads: list[bytes] = []
+
+        with open(self.log_path, "r", encoding="utf-8") as file:
+            for line_num, line in enumerate(file, 1):
+                line = line.strip()
+                if not line or "|" not in line:
+                    continue
+
+                hex_str: str = line.rsplit("|", 1)[-1].strip()
+
+                try:
+                    payloads.append(bytes.fromhex(hex_str))
+                except ValueError:
+                    print(
+                        f"[Warning] Line {line_num}: Skipping invalid hex string '{hex_str}'"
+                    )
+
+        self.payloads = payloads
+
+        return self.payloads
+
+
+def print_head_tail(
+    items: list[bytes], label: str = "Items", head: int = 5, tail: int = 5
+) -> None:
+    """Prints the head and tail of a list of bytes with index formatting."""
+
+    total: int = len(items)
+    index_width: int = len(str(total))
+
+    max_length: int = max(len(item) for item in items)
+    length_width: int = len(str(max_length))
+
+    print("-" * 64)
+    print(f"{label} (Total: {total})")
+    print("-" * 64)
+
+    if total <= head + tail:
+        for idx, item in enumerate(items):
+            print(
+                f"{idx:>{index_width}} | {len(item):>{length_width}} | {item.hex(' ')}"
+            )
+    else:
+        for idx in range(head):
+            item = items[idx]
+            print(
+                f"{idx:>{index_width}} | {len(item):>{length_width}} | {item.hex(' ')}"
+            )
+
+        print(
+            f"{'-' * index_width} | {'-' * length_width} | -- {total - (head + tail)} {label.lower()} omitted --"
+        )
+
+        for idx in range(total - tail, total):
+            item = items[idx]
+            print(
+                f"{idx:>{index_width}} | {len(item):>{length_width}} | {item.hex(' ')}"
+            )
+
+    print("-" * 64)
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        print("Usage: python3 analyzer.py <path_to_capture_log>")
+        sys.exit(1)
+
+    analyzer: Analyzer = Analyzer(Path(sys.argv[1]))
+
+    payloads: list[bytes] = analyzer.load_payloads()
+    print_head_tail(payloads, label="Payloads")
+
+
+if __name__ == "__main__":
+    main()
