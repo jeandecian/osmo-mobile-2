@@ -139,6 +139,7 @@ def main() -> None:
 
     frames: list[bytes] = analyzer.reassemble_frames()
     print_head_tail(frames, label="Frames")
+    get_unique_lengths(frames, label="Frame")
 
 
 if __name__ == "__main__":
