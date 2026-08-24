@@ -8,6 +8,7 @@ class Analyzer:
     def __init__(self, log_path: str | Path) -> None:
         self.log_path: Path = Path(log_path)
         self.payloads: list[bytes] = []
+        self.frames: list[bytes] = []
 
     def load_payloads(self) -> list[bytes]:
         """Reads the log file line-by-line and extracts raw hex bytes."""
@@ -35,6 +36,26 @@ class Analyzer:
         self.payloads = payloads
 
         return self.payloads
+
+    def reassemble_frames(self) -> list[bytes]:
+        """Reassembles fragmented BLE payloads into complete frames based on the 20-byte MTU limit."""
+
+        frames: list[bytes] = []
+        buffer: bytearray = bytearray()
+
+        for payload in self.payloads:
+            buffer.extend(payload)
+
+            if len(payload) < 20:
+                frames.append(bytes(buffer))
+                buffer.clear()
+
+        if buffer:
+            frames.append(bytes(buffer))
+
+        self.frames = frames
+
+        return self.frames
 
 
 def print_head_tail(
@@ -114,6 +135,10 @@ def main() -> None:
             "[NOTE] Frames larger than 20 bytes are split across multiple consecutive payloads "
             "and must be reassembled into a single stream."
         )
+        print()
+
+    frames: list[bytes] = analyzer.reassemble_frames()
+    print_head_tail(frames, label="Frames")
 
 
 if __name__ == "__main__":
