@@ -77,6 +77,20 @@ def print_head_tail(
     print("-" * 64)
 
 
+def get_unique_lengths(items: list[bytes], label: str = "Items") -> list[int]:
+    """Returns a sorted list of unique byte lengths present in the dataset."""
+
+    unique_lengths: list[int] = sorted({len(item) for item in items})
+
+    print(
+        f"Unique {label.capitalize()} Lengths (bytes):",
+        ", ".join(str(length) for length in unique_lengths),
+    )
+    print("-" * 64)
+
+    return unique_lengths
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         print("Usage: python3 analyzer.py <path_to_capture_log>")
@@ -86,6 +100,20 @@ def main() -> None:
 
     payloads: list[bytes] = analyzer.load_payloads()
     print_head_tail(payloads, label="Payloads")
+
+    payload_lengths: list[int] = get_unique_lengths(payloads, label="Payload")
+    if payload_lengths:
+        print(
+            f"\n[NOTE] Maximum observed payload length: {max(payload_lengths)} bytes."
+        )
+        print(
+            "[NOTE] Captures are capped at 20 bytes due to the standard BLE ATT MTU limit "
+            "(23-byte default MTU minus 3 bytes of ATT protocol overhead)."
+        )
+        print(
+            "[NOTE] Frames larger than 20 bytes are split across multiple consecutive payloads "
+            "and must be reassembled into a single stream."
+        )
 
 
 if __name__ == "__main__":
